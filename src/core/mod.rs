@@ -1,1 +1,2 @@
-mod dump;
+mod client;
+pub mod dump;
