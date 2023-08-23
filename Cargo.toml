@@ -1,0 +1,16 @@
+[package]
+name = "jenkenpwn"
+version = "0.1.0"
+edition = "2021"
+authors = ["y0k4i"]
+description = "Jenkins pwning tool FTW"
+license = "MIT"
+repository = "https://github.com/y0k4i-1337/jenkenpwn"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.3.23", features = ["derive", "wrap_help"] }
+reqwest = { version = "0.11.19", features = ["json"] }
+tokio = { version = "1.32.0", features = ["full"] }
