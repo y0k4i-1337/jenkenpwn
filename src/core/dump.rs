@@ -2,6 +2,7 @@ use super::client::JenkinsClient;
 use crate::utils::{self, concatenate_url, extract_path, search_substring};
 use crate::{logger::init_logger, utils::create_directory};
 use async_recursion::async_recursion;
+use futures::future::join_all;
 use log::{debug, info, warn};
 
 pub struct Dumper {
@@ -48,6 +49,7 @@ impl Dumper {
         last_only: bool,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let response = self.client.get_path("/api/json").await?;
+
         if search_substring(&response, r"Authentication required") {
             return Err("Authentication required".into());
         } else if search_substring(&response, r"Invalid password/token") {
@@ -57,19 +59,29 @@ impl Dumper {
         } else {
             let response: serde_json::Value = serde_json::from_str(&response)?;
 
-            // extract jobs from the parsed JSON and create a new JSON object
+            // Process jobs concurrently using asynchronous tasks
             let mut jobs_array = Vec::new();
             if let Some(jobs) = response.get("jobs").and_then(|jobs| jobs.as_array()) {
                 debug!("Found {} jobs", jobs.len());
                 debug!("Retrieving job info recursively");
-                for job in jobs {
+
+                let tasks = jobs.iter().map(|job| async {
                     if let Some(job_url) = job.get("url").and_then(|url| url.as_str()) {
                         match self.get_jobs_recursive(job_url, last_only).await {
-                            Ok(job_info) => jobs_array.push(job_info),
-                            Err(e) => warn!("Error: {}", e),
+                            Ok(job_info) => Some(job_info),
+                            Err(e) => {
+                                warn!("Error: {}", e);
+                                None
+                            }
                         }
+                    } else {
+                        None
                     }
-                }
+                });
+
+                // Execute tasks concurrently and collect results
+                let results: Vec<Option<serde_json::Value>> = join_all(tasks).await;
+                jobs_array.extend(results.into_iter().filter_map(|result| result));
             }
             Ok(serde_json::Value::Array(jobs_array))
         }
