@@ -80,7 +80,6 @@ impl JenkinsClient {
             Err(format!("Error: {}", response.status()).into())
         }
     }
-
 }
 
 impl Credentials {

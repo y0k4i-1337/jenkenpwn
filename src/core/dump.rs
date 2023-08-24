@@ -1,8 +1,8 @@
 use super::client::JenkinsClient;
-use crate::utils::search_substring;
+use crate::utils::{self, concatenate_url, extract_path, search_substring};
 use crate::{logger::init_logger, utils::create_directory};
 use async_recursion::async_recursion;
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 pub struct Dumper {
     pub client: JenkinsClient,
@@ -36,10 +36,10 @@ impl Dumper {
         &self,
         base_directory: &str,
         build_path: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let build_directory = format!("{}/{}", base_directory, build_path);
         create_directory(&build_directory)?;
-        Ok(())
+        Ok(build_directory)
     }
 
     /// Dump all jobs
@@ -156,5 +156,135 @@ impl Dumper {
         }
 
         Ok(job_info)
+    }
+
+    /// Given a build url, dump consoleText and injectedEnvVars and save them
+    /// in a directory based on the build path (e.g. "job/MyJob/1")
+    pub async fn dump_build(
+        &self,
+        build_url: &str,
+        output_directory: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Make a GET request to retrieve build information
+        debug!("Retrieving build info from: {}", build_url);
+        let response = self
+            .client
+            .get_url(format!("{}/api/json", build_url).as_str())
+            .await
+            .expect("Could not retrieve build info");
+
+        // Parse the JSON response
+        let build_info: serde_json::Value = serde_json::from_str(&response).expect("Invalid JSON");
+
+        // Extract build path from url (e.g. "job/MyJob/1")
+        let build_path = extract_path(build_url)?;
+        info!("Dumping build: {}", build_path);
+
+        let build_directory = self.create_build_directory(output_directory, &build_path)?;
+        // Save build info to file
+        let build_info_file = format!("{}/build_info.json", build_directory);
+        debug!("Saving build info to {}", build_info_file);
+        utils::save_json(&build_info, &build_info_file)?;
+
+        // Get /consoleText for the build
+        debug!("Retrieving consoleText for build {}", build_path);
+        let console_text_url = concatenate_url(build_url, "/consoleText")?;
+        let console_text = self
+            .dump_console_text(&console_text_url)
+            .await
+            .unwrap_or_default();
+        if !console_text.is_empty() {
+            let console_text_file = format!("{}/consoleText", build_directory);
+            debug!("Saving consoleText to {}", console_text_file);
+            // async write to file
+            tokio::fs::write(console_text_file, console_text).await?;
+        } else {
+            debug!("consoleText is empty");
+        }
+
+        // Get /injectedEnvVars for the build
+        debug!("Retrieving injectedEnvVars for build {}", build_path);
+        let injected_env_vars_url = concatenate_url(build_url, "/injectedEnvVars/api/json")?;
+        let injected_env_vars = self
+            .dump_injected_env_vars(&injected_env_vars_url)
+            .await
+            .unwrap_or_default();
+        if !injected_env_vars.is_null() {
+            let injected_env_vars_file = format!("{}/injectedEnvVars.json", build_directory);
+            debug!("Saving injectedEnvVars to {}", injected_env_vars_file);
+            utils::save_json(&injected_env_vars, &injected_env_vars_file)?;
+        } else {
+            debug!("injectedEnvVars is empty");
+        }
+        Ok(())
+    }
+
+    /// Dump builds for all jobs
+    pub async fn dump_builds(
+        &self,
+        output_directory: &str,
+        last_only: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // get all jobs
+        let jobs = self.dump_jobs(last_only).await?;
+        // if there are no jobs, return with an error
+        if let Some(jobs) = jobs.as_array() {
+            if jobs.is_empty() {
+                return Err("No jobs found".into());
+            }
+        }
+        // get all builds urls
+        let mut builds_urls = Vec::new();
+        self.get_builds_urls_recursive(&jobs, &mut builds_urls);
+        // dump all builds
+        for build_url in builds_urls {
+            match self.dump_build(&build_url, output_directory).await {
+                Ok(_) => {}
+                Err(e) => warn!("Error dumping build {}: {}", build_url, e),
+            }
+        }
+        Ok(())
+    }
+
+    /// Dump consoleText
+    async fn dump_console_text(
+        &self,
+        console_text_url: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        // Make a GET request to retrieve consoleText
+        debug!("Retrieving consoleText from: {}", console_text_url);
+        let response = self.client.get_url(console_text_url).await?;
+
+        Ok(response)
+    }
+
+    /// Dump injectedEnvVars
+    async fn dump_injected_env_vars(
+        &self,
+        injected_env_vars_url: &str,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        // Make a GET request to retrieve injectedEnvVars
+        debug!("Retrieving injectedEnvVars from: {}", injected_env_vars_url);
+        let response = self.client.get_url(injected_env_vars_url).await?;
+        let json: serde_json::Value = serde_json::from_str(&response)?;
+
+        Ok(json)
+    }
+
+    /// Iterate over a serde_json::Value recursively and get builds urls,
+    /// returning a Vec<String> with all urls
+    fn get_builds_urls_recursive(&self, json: &serde_json::Value, builds_urls: &mut Vec<String>) {
+        if let Some(builds) = json.get("builds").and_then(|builds| builds.as_array()) {
+            for build in builds {
+                if let Some(url) = build.get("url").and_then(|url| url.as_str()) {
+                    builds_urls.push(url.to_string());
+                }
+            }
+        }
+        if let Some(sub_jobs) = json.get("sub_jobs").and_then(|jobs| jobs.as_array()) {
+            for sub_job in sub_jobs {
+                self.get_builds_urls_recursive(sub_job, builds_urls);
+            }
+        }
     }
 }

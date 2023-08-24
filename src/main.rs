@@ -4,7 +4,7 @@ mod utils;
 
 use crate::core::dump::Dumper;
 use clap::Parser;
-use log::warn;
+use log::{info, warn};
 use tokio;
 use utils::Cli;
 
@@ -29,7 +29,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             utils::create_directory(&args.output)?;
             match args.resource {
                 utils::DumpResource::Builds => {
-                    unimplemented!("Builds are not implemented yet")
+                    let result = dumper.dump_builds(&args.output, args.last).await;
+                    match result {
+                        Ok(_) => {
+                            info!("Builds dumped successfully");
+                        }
+                        Err(e) => {
+                            warn!("Error dumping builds: {}", e);
+                        }
+                    }
                 }
                 utils::DumpResource::Jobs => {
                     let result = dumper.dump_jobs(args.last).await;
