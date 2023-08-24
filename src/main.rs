@@ -4,7 +4,7 @@ mod utils;
 
 use crate::core::dump::Dumper;
 use clap::Parser;
-use serde_json::to_string_pretty;
+use log::warn;
 use tokio;
 use utils::Cli;
 
@@ -26,16 +26,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 Dumper::new(args.url.clone(), cli.verbose)
             };
-
+            utils::create_directory(&args.output)?;
             match args.resource {
                 utils::DumpResource::Builds => {
                     unimplemented!("Builds are not implemented yet")
                 }
                 utils::DumpResource::Jobs => {
-                    let result = dumper.dump_jobs().await;
+                    let result = dumper.dump_jobs(args.last).await;
                     match result {
-                        Ok(_) => println!("{}", to_string_pretty(&result.unwrap())?),
-                        Err(e) => println!("Error: {}", e),
+                        Ok(jobs) => {
+                            let output = format!("{}/jobs.json", args.output);
+                            utils::save_json(&jobs, &output)?;
+                        }
+                        Err(e) => {
+                            warn!("Error dumping jobs: {}", e);
+                        }
                     }
                 }
                 utils::DumpResource::Views => {

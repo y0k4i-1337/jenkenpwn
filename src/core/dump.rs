@@ -1,8 +1,8 @@
 use super::client::JenkinsClient;
-use crate::logger::init_logger;
 use crate::utils::search_substring;
+use crate::{logger::init_logger, utils::create_directory};
 use async_recursion::async_recursion;
-use log::{warn, debug};
+use log::{debug, warn};
 
 pub struct Dumper {
     pub client: JenkinsClient,
@@ -30,8 +30,23 @@ impl Dumper {
         }
     }
 
+    /// Create output directory for build based on base directory and build
+    /// path (e.g. "job/MyJob/1")
+    pub fn create_build_directory(
+        &self,
+        base_directory: &str,
+        build_path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let build_directory = format!("{}/{}", base_directory, build_path);
+        create_directory(&build_directory)?;
+        Ok(())
+    }
+
     /// Dump all jobs
-    pub async fn dump_jobs(&self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    pub async fn dump_jobs(
+        &self,
+        last_only: bool,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let response = self.client.get_path("/api/json").await?;
         if search_substring(&response, r"Authentication required") {
             return Err("Authentication required".into());
@@ -49,7 +64,7 @@ impl Dumper {
                 debug!("Retrieving job info recursively");
                 for job in jobs {
                     if let Some(job_url) = job.get("url").and_then(|url| url.as_str()) {
-                        match self.get_jobs_recursive(job_url).await {
+                        match self.get_jobs_recursive(job_url, last_only).await {
                             Ok(job_info) => jobs_array.push(job_info),
                             Err(e) => warn!("Error: {}", e),
                         }
@@ -65,6 +80,7 @@ impl Dumper {
     async fn get_jobs_recursive(
         &self,
         job_url: &str,
+        last_only: bool,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         // Make a GET request to retrieve job information
         debug!("Retrieving job info from: {}", job_url);
@@ -87,7 +103,7 @@ impl Dumper {
             let mut sub_jobs_info = Vec::new();
             for sub_job in sub_jobs {
                 if let Some(sub_job_url) = sub_job.get("url").and_then(|url| url.as_str()) {
-                    let sub_job_info = self.get_jobs_recursive(sub_job_url).await?;
+                    let sub_job_info = self.get_jobs_recursive(sub_job_url, last_only).await?;
                     sub_jobs_info.push(sub_job_info);
                 }
             }
@@ -96,12 +112,47 @@ impl Dumper {
 
         // If the job has builds, include their URLs
         if let Some(builds) = json.get("builds").and_then(|builds| builds.as_array()) {
-            let build_urls: Vec<serde_json::Value> = builds
-                .iter()
-                .filter_map(|build| build.get("url").and_then(|url| url.as_str()))
-                .map(|url| serde_json::Value::String(url.to_string()))
-                .collect();
-            job_info["builds"] = serde_json::Value::Array(build_urls);
+            if last_only {
+                // get the first valid url among lastSuccessfulBuild.url, or
+                // lastCompletedBuild.url, or lastStableBuild.url, or the first
+                // element from "builds", and add it
+                // to job_info as "builds" array
+                let mut build_urls = Vec::new();
+                if let Some(url) = json
+                    .get("lastSuccessfulBuild")
+                    .and_then(|build| build.get("url"))
+                    .and_then(|url| url.as_str())
+                {
+                    build_urls.push(serde_json::Value::String(url.to_string()));
+                } else if let Some(url) = json
+                    .get("lastCompletedBuild")
+                    .and_then(|build| build.get("url"))
+                    .and_then(|url| url.as_str())
+                {
+                    build_urls.push(serde_json::Value::String(url.to_string()));
+                } else if let Some(url) = json
+                    .get("lastStableBuild")
+                    .and_then(|build| build.get("url"))
+                    .and_then(|url| url.as_str())
+                {
+                    build_urls.push(serde_json::Value::String(url.to_string()));
+                } else if let Some(url) = builds
+                    .first()
+                    .and_then(|build| build.get("url"))
+                    .and_then(|url| url.as_str())
+                {
+                    build_urls.push(serde_json::Value::String(url.to_string()));
+                }
+                job_info["builds"] = serde_json::Value::Array(build_urls);
+            } else {
+                // get all build urls and add them to job_info as "builds" array
+                let build_urls: Vec<serde_json::Value> = builds
+                    .iter()
+                    .filter_map(|build| build.get("url").and_then(|url| url.as_str()))
+                    .map(|url| serde_json::Value::String(url.to_string()))
+                    .collect();
+                job_info["builds"] = serde_json::Value::Array(build_urls);
+            }
         }
 
         Ok(job_info)
