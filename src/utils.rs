@@ -37,6 +37,9 @@ pub struct DumpArgs {
     /// dump only the last build of each job
     #[arg(short, long)]
     pub last: bool,
+    /// read jobs from a jobs dump file
+    #[arg(short, long)]
+    pub jobs: Option<String>,
     /// resources to dump
     pub resource: DumpResource,
     /// url of the jenkins server
@@ -53,14 +56,13 @@ pub enum DumpResource {
     Views,
 }
 
-/// Concatenate the given path to the given url
+/// Concatenate the given path to the given url. The path can be absolute or relative.
 pub fn concatenate_url(
     base_url: &str,
     endpoint: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let base = Url::parse(base_url).expect("Invalid base url");
-    let sanitized = base.join(endpoint).expect("Error concatenating url");
-
+    let sanitized = base.join(endpoint)?;
     Ok(sanitized.to_string())
 }
 
@@ -98,4 +100,12 @@ pub fn save_json(
     let file = std::fs::File::create(filename)?;
     serde_json::to_writer_pretty(file, json)?;
     Ok(())
+}
+
+/// Load JSON from file
+pub fn load_json(filename: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    debug!("Loading JSON from file: {}", filename);
+    let file = std::fs::File::open(filename)?;
+    let json: serde_json::Value = serde_json::from_reader(file)?;
+    Ok(json)
 }

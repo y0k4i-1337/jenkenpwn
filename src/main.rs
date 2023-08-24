@@ -29,22 +29,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             utils::create_directory(&args.output)?;
             match args.resource {
                 utils::DumpResource::Builds => {
-                    let result = dumper.dump_builds(&args.output, args.last).await;
-                    match result {
-                        Ok(_) => {
-                            info!("Builds dumped successfully");
+                    match &args.jobs {
+                        Some(jobs_file) => {
+                            let result = dumper
+                                .dump_builds_from_file(&jobs_file, &args.output)
+                                .await;
+                            match result {
+                                Ok(_) => {
+                                    info!("Builds dumped successfully");
+                                }
+                                Err(e) => {
+                                    warn!("Error dumping builds: {}", e);
+                                }
+                            }
                         }
-                        Err(e) => {
-                            warn!("Error dumping builds: {}", e);
+                        None => {
+                            let result = dumper.dump_builds(&args.output, args.last).await;
+                            match result {
+                                Ok(_) => {
+                                    info!("Builds dumped successfully");
+                                }
+                                Err(e) => {
+                                    warn!("Error dumping builds: {}", e);
+                                }
+                            }
                         }
                     }
                 }
                 utils::DumpResource::Jobs => {
-                    let result = dumper.dump_jobs(args.last).await;
+                    let result = dumper.dump_jobs(&args.output, args.last).await;
                     match result {
-                        Ok(jobs) => {
-                            let output = format!("{}/jobs.json", args.output);
-                            utils::save_json(&jobs, &output)?;
+                        Ok(_) => {
+                            info!("Jobs dumped successfully");
                         }
                         Err(e) => {
                             warn!("Error dumping jobs: {}", e);
