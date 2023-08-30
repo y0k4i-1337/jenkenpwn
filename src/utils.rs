@@ -7,10 +7,10 @@ use reqwest::Url;
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Cli {
-    /// verbose mode
+    /// Verbose mode
     #[arg(short, long)]
     pub verbose: bool,
-    /// do not verify SSL certificate
+    /// Do not verify SSL certificate
     #[arg(short, long)]
     pub insecure: bool,
     #[command(subcommand)]
@@ -19,43 +19,43 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
-    /// dump builds
+    /// Dump jobs and builds data
     Dump(DumpArgs),
 }
 
 #[derive(Args, Debug)]
 pub struct DumpArgs {
-    /// username for authentication
+    /// Username for authentication
     #[arg(short, long)]
     pub username: Option<String>,
-    /// password for authentication
+    /// Password for authentication
     #[arg(short, long)]
     pub password: Option<String>,
-    /// recover from server failure, skiping already downloaded builds
+    /// Recover from server failure, skiping already downloaded builds
     #[arg(short, long)]
     pub recover: bool,
-    /// output directory
+    /// Output directory
     #[arg(short, long, default_value = "dumps")]
     pub output: String,
-    /// dump only the last build of each job
+    /// Dump only the last build of each job
     #[arg(short, long)]
     pub last: bool,
-    /// read jobs from a jobs dump file
+    /// Read jobs from a jobs dump file
     #[arg(short, long)]
     pub jobs: Option<String>,
-    /// resources to dump
+    /// Resources to dump
     pub resource: DumpResource,
-    /// url of the jenkins server
+    /// Url of the jenkins server
     pub url: String,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum DumpResource {
-    /// dump builds
+    /// Dump builds
     Builds,
-    /// dump jobs
+    /// Dump jobs
     Jobs,
-    /// dump views
+    /// Dump views
     Views,
 }
 
