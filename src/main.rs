@@ -22,9 +22,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     username.clone(),
                     password.clone(),
                     cli.verbose,
+                    cli.insecure,
                 )
             } else {
-                Dumper::new(args.url.clone(), cli.verbose)
+                Dumper::new(args.url.clone(), cli.verbose, cli.insecure)
             };
             utils::create_directory(&args.output)?;
             match args.resource {

@@ -12,10 +12,10 @@ pub struct Dumper {
 // implement Dumper
 impl Dumper {
     /// Create a new Dumper without credentials
-    pub fn new(url: String, verbose: bool) -> Self {
+    pub fn new(url: String, verbose: bool, insecure: bool) -> Self {
         init_logger(verbose);
         Self {
-            client: JenkinsClient::new(url, verbose),
+            client: JenkinsClient::new(url, verbose, insecure),
         }
     }
 
@@ -25,9 +25,10 @@ impl Dumper {
         username: String,
         password: String,
         verbose: bool,
+        insecure: bool
     ) -> Self {
         Self {
-            client: JenkinsClient::with_credentials(url, username, password, verbose),
+            client: JenkinsClient::with_credentials(url, username, password, verbose, insecure),
         }
     }
 

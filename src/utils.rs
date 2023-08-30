@@ -10,6 +10,9 @@ pub struct Cli {
     /// verbose mode
     #[arg(short, long)]
     pub verbose: bool,
+    /// do not verify SSL certificate
+    #[arg(short, long)]
+    pub insecure: bool,
     #[command(subcommand)]
     pub subcmd: SubCommand,
 }

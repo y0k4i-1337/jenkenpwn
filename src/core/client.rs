@@ -16,10 +16,15 @@ struct Credentials {
 
 impl JenkinsClient {
     /// Create a new JenkinsClient without credentials
-    pub fn new(url: String, verbose: bool) -> Self {
+    pub fn new(url: String, verbose: bool, insecure: bool) -> Self {
         init_logger(verbose);
+        let client = if insecure {
+            Client::builder().danger_accept_invalid_certs(true).build().unwrap()
+        } else {
+            Client::new()
+        };
         Self {
-            client: Client::new(),
+            client,
             url,
             credentials: None,
         }
@@ -31,10 +36,16 @@ impl JenkinsClient {
         username: String,
         password: String,
         verbose: bool,
+        insecure: bool
     ) -> Self {
         init_logger(verbose);
+        let client = if insecure {
+            Client::builder().danger_accept_invalid_certs(true).build().unwrap()
+        } else {
+            Client::new()
+        };
         Self {
-            client: Client::new(),
+            client,
             url,
             credentials: Some(Credentials {
                 username: Some(username),
