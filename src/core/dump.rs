@@ -1,6 +1,6 @@
 use super::client::JenkinsClient;
 use crate::utils::{self, concatenate_url, extract_path, search_substring};
-use crate::{logger::init_logger, utils::create_directory};
+use crate::utils::create_directory;
 use async_recursion::async_recursion;
 use futures::future::{join_all, try_join_all};
 use log::{debug, info, warn};
@@ -13,7 +13,6 @@ pub struct Dumper {
 impl Dumper {
     /// Create a new Dumper without credentials
     pub fn new(url: String, verbose: bool, insecure: bool) -> Self {
-        init_logger(verbose);
         Self {
             client: JenkinsClient::new(url, verbose, insecure),
         }
